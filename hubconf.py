@@ -143,7 +143,7 @@ _MODEL_CONFIGS = {
 }
 
 
-def _load_model_with_config(config_path, model_name, device="cuda:0", pretrained=True):
+def _load_model_with_config(config_path, model_name, device="cuda:0", pretrained=True, checkpoint_path=None):
     """
     Helper function to load model and preprocessor from config file.
 
@@ -248,7 +248,9 @@ def _load_model_with_config(config_path, model_name, device="cuda:0", pretrained
     log.info(f"  state_std: {preprocessor.state_std}")
 
     # Determine checkpoint source: try HF Hub first (if pretrained), then URL, then local path
-    if pretrained and model_name in MODEL_URLS:
+    if checkpoint_path is not None:
+        checkpoint = checkpoint_path
+    elif pretrained and model_name in MODEL_URLS:
         checkpoint = _get_checkpoint_path(model_name, use_hf=True)
     else:
         checkpoint = model_kwargs.get("checkpoint")
@@ -275,7 +277,7 @@ def _load_model_with_config(config_path, model_name, device="cuda:0", pretrained
     return model, preprocessor
 
 
-def _load_model(model_name, pretrained=True, device="cuda:0"):
+def _load_model(model_name, pretrained=True, device="cuda:0", checkpoint_path=None):
     """
     Generic model loader that uses the model registry.
 
@@ -290,16 +292,21 @@ def _load_model(model_name, pretrained=True, device="cuda:0"):
     if model_name not in _MODEL_CONFIGS:
         raise ValueError(f"Unknown model: {model_name}. Available: {list(_MODEL_CONFIGS.keys())}")
 
+    if checkpoint_path is not None:
+        checkpoint_path = os.path.abspath(os.fspath(checkpoint_path))
+        if not os.path.isfile(checkpoint_path):
+            raise FileNotFoundError(checkpoint_path)
+
     config_rel_path, weight_key = _MODEL_CONFIGS[model_name]
     config_path = os.path.join(os.path.dirname(__file__), config_rel_path)
-    return _load_model_with_config(config_path, model_name=weight_key, device=device, pretrained=pretrained)
+    return _load_model_with_config(config_path, model_name=weight_key, device=device, pretrained=pretrained, checkpoint_path=checkpoint_path)
 
 
 def _make_model_fn(model_name):
     """Factory to create model loading functions for torch.hub."""
 
-    def model_fn(pretrained=True, device="cuda:0", **kwargs):
-        return _load_model(model_name, pretrained=pretrained, device=device)
+    def model_fn(pretrained=True, device="cuda:0", checkpoint_path=None):
+        return _load_model(model_name, pretrained=pretrained, device=device, checkpoint_path=checkpoint_path)
 
     return model_fn
 
